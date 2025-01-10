@@ -181,7 +181,7 @@ const FileUpload = () => {
 
       setError(null);
       const headers = getAuthHeaders();
-      const response = await fetch(`http://localhost:5005/api/files/${fileId}`, {
+      const response = await fetch(`${API_URL}/api/files/${fileId}`, {
         method: 'DELETE',
         headers: headers,
         credentials: 'include'
@@ -208,7 +208,7 @@ const FileUpload = () => {
 
   const toggleDeliveryTime = async () => {
     try {
-      const response = await fetch('http://localhost:5005/api/delivery-times/toggle', {
+      const response = await fetch(`${API_URL}/api/delivery-times/toggle`, {
         method: 'POST',
         headers: getAuthHeaders(),
         credentials: 'include'
