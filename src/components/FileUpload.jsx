@@ -22,15 +22,15 @@ const FileUpload = () => {
 
   const getAuthHeaders = () => {
     if (typeof window === 'undefined') return null;
-
+  
     const token = localStorage.getItem('shopifyToken');
     const shop = localStorage.getItem('shopDomain');
-
+  
     if (!token || !shop) {
       handleAuthError();
       return null;
     }
-
+  
     return {
       'Authorization': `Bearer ${token}`,
       'X-Shop-Domain': shop,
@@ -50,12 +50,14 @@ const FileUpload = () => {
     try {
       const headers = getAuthHeaders();
       if (!headers) return;
-
+  
       const response = await fetch(`${API_URL}/api/delivery-times/status`, {
+        method: 'GET',
         headers,
-        credentials: 'include'
+        credentials: 'include',
+        mode: 'cors'
       });
-
+  
       if (!response.ok) {
         if (response.status === 401) {
           handleAuthError();
@@ -63,7 +65,7 @@ const FileUpload = () => {
         }
         throw new Error('Failed to fetch delivery status');
       }
-
+  
       const data = await response.json();
       setIsDeliveryTimeActive(data.isActive);
     } catch (error) {
