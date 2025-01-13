@@ -7,42 +7,60 @@ const FileUpload = () => {
   const [selectedFileData, setSelectedFileData] = useState(null);
   const [isDeliveryTimeActive, setIsDeliveryTimeActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [mounted, setMounted] = useState(false);
   const fileInputRef = useRef(null);
 
+  const API_URL = import.meta.env.VITE_API_URL || '';
+
   useEffect(() => {
-    fetchFiles();
-    fetchDeliveryStatus();
+    setMounted(true);
+    if (typeof window !== 'undefined') {
+      fetchFiles();
+      fetchDeliveryStatus();
+    }
   }, []);
 
-  const API_URL = import.meta.env.VITE_API_URL;
-
   const getAuthHeaders = () => {
-    try {
-      const token = localStorage.getItem('shopifyToken');
-      const shop = localStorage.getItem('shopDomain');
+    if (typeof window === 'undefined') return null;
 
-      if (!token || !shop) {
-        throw new Error('Authentication credentials missing');
-      }
+    const token = localStorage.getItem('shopifyToken');
+    const shop = localStorage.getItem('shopDomain');
 
-      return {
-        'Authorization': `Bearer ${token}`,
-        'X-Shop-Domain': shop
-      };
-    } catch (error) {
-      console.error('Auth header error:', error);
-      throw error;
+    if (!token || !shop) {
+      handleAuthError();
+      return null;
+    }
+
+    return {
+      'Authorization': `Bearer ${token}`,
+      'X-Shop-Domain': shop,
+      'Content-Type': 'application/json'
+    };
+  };
+
+  const handleAuthError = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('shopifyToken');
+      localStorage.removeItem('shopDomain');
+      window.location.href = '/auth';
     }
   };
 
   const fetchDeliveryStatus = async () => {
     try {
+      const headers = getAuthHeaders();
+      if (!headers) return;
+
       const response = await fetch(`${API_URL}/api/delivery-times/status`, {
-        headers: getAuthHeaders(),
+        headers,
         credentials: 'include'
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          handleAuthError();
+          return;
+        }
         throw new Error('Failed to fetch delivery status');
       }
 
@@ -57,38 +75,35 @@ const FileUpload = () => {
   const fetchFiles = async () => {
     try {
       setError(null);
-      console.log('Fetching files...');
-      
       const headers = getAuthHeaders();
+      if (!headers) return;
+
       const response = await fetch(`${API_URL}/api/files`, {
-        headers: headers,
+        headers,
         credentials: 'include'
       });
-      
-      const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch files');
+        if (response.status === 401) {
+          handleAuthError();
+          return;
+        }
+        throw new Error('Failed to fetch files');
       }
-      
-      console.log('Fetched files:', data);
+
+      const data = await response.json();
       setFiles(data);
     } catch (error) {
       console.error('Fetch error:', error);
       setError('Failed to fetch files: ' + error.message);
-      if (error.message.includes('Authentication')) {
-        localStorage.removeItem('shopifyToken');
-        localStorage.removeItem('shopDomain');
-        window.location.reload();
-      }
     }
   };
 
-  const handleFileSelect = async (event) => {
+  const handleFileSelect = (event) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedFile(file);
-      await handleFileUpload(file);
+      handleFileUpload(file);
     }
   };
 
@@ -97,51 +112,51 @@ const FileUpload = () => {
       setError('Please select a file');
       return;
     }
-  
+
     setError(null);
     setUploading(true);
-  
+
     try {
       if (!file.name.match(/\.(xlsx|xls)$/)) {
         throw new Error('Please upload only Excel files (.xlsx or .xls)');
       }
-  
+
       if (file.size > 5 * 1024 * 1024) {
         throw new Error('File size must be less than 5MB');
       }
-  
+
       const formData = new FormData();
       formData.append('file', file);
-  
+
       const headers = getAuthHeaders();
-      // Do not set Content-Type, let the browser set it with boundary
+      if (!headers) return;
+
+      // Remove Content-Type for FormData
       delete headers['Content-Type'];
-  
-      console.log('Uploading file:', file.name);
-      
+
       const response = await fetch(`${API_URL}/api/upload`, {
         method: 'POST',
-        headers: headers,
+        headers,
         credentials: 'include',
         body: formData
       });
-  
-      const data = await response.json();
-      
+
       if (!response.ok) {
-        throw new Error(data.error || 'Upload failed');
+        if (response.status === 401) {
+          handleAuthError();
+          return;
+        }
+        throw new Error('Upload failed');
       }
-  
-      console.log('Upload response:', data);
-  
-      // Clear form and refresh files
+
+      const data = await response.json();
+
+      // Reset form
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
       setSelectedFile(null);
       await fetchFiles();
-      setError(null);
-  
     } catch (error) {
       console.error('Upload error:', error);
       setError('Upload failed: ' + error.message);
@@ -154,18 +169,22 @@ const FileUpload = () => {
     try {
       setError(null);
       const headers = getAuthHeaders();
+      if (!headers) return;
+
       const response = await fetch(`${API_URL}/api/files/${fileId}`, {
-        headers: headers,
+        headers,
         credentials: 'include'
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch file data');
+        if (response.status === 401) {
+          handleAuthError();
+          return;
+        }
+        throw new Error('Failed to fetch file data');
       }
 
       const data = await response.json();
-      console.log('Fetched file data:', data);
       setSelectedFileData(data);
     } catch (error) {
       console.error('View error:', error);
@@ -181,25 +200,27 @@ const FileUpload = () => {
 
       setError(null);
       const headers = getAuthHeaders();
+      if (!headers) return;
+
       const response = await fetch(`${API_URL}/api/files/${fileId}`, {
         method: 'DELETE',
-        headers: headers,
+        headers,
         credentials: 'include'
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Delete failed');
+        if (response.status === 401) {
+          handleAuthError();
+          return;
+        }
+        throw new Error('Delete failed');
       }
 
-      // Clear selected file data if it was the deleted file
       if (selectedFileData?.id === fileId) {
         setSelectedFileData(null);
       }
 
-      // Refresh the file list
       await fetchFiles();
-      setError(null);
     } catch (error) {
       console.error('Delete error:', error);
       setError('Failed to delete file: ' + error.message);
@@ -208,13 +229,20 @@ const FileUpload = () => {
 
   const toggleDeliveryTime = async () => {
     try {
+      const headers = getAuthHeaders();
+      if (!headers) return;
+
       const response = await fetch(`${API_URL}/api/delivery-times/toggle`, {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers,
         credentials: 'include'
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          handleAuthError();
+          return;
+        }
         throw new Error('Failed to toggle delivery time');
       }
 
@@ -225,6 +253,23 @@ const FileUpload = () => {
       setError('Failed to toggle delivery time display');
     }
   };
+
+  // Don't render anything during SSR
+  if (!mounted) return null;
+
+  // If no auth, show login prompt
+  if (!localStorage.getItem('shopifyToken') || !localStorage.getItem('shopDomain')) {
+    return (
+      <div className="p-6 bg-white rounded-lg shadow">
+        <div className="text-center">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">Please authenticate</h2>
+          <p className="text-gray-600">
+            You need to authenticate with Shopify to access this feature.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 bg-white rounded-lg shadow">
@@ -378,7 +423,7 @@ const FileUpload = () => {
                           {row[header]}
                         </td>
                       ))}
-                    </tr>
+                      </tr>
                   ))}
                 </tbody>
               </table>
